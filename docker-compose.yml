@@ -1,0 +1,16 @@
+version: "3.9"
+services:
+  spotinlizer:
+    image: spotinlizer:latest
+    build: .
+    entrypoint: python /main.py --known_lyrics "my telescope i see looking back at me"
+    volumes:
+      - ./main.py:/main.py
+      - ./lyrics_utils.py:/lyrics_utils.py
+      - .cache:/.cache
+
+    environment:
+      - SPOTIFY_CLIENT_ID=FILL
+      - SPOTIFY_CLIENT_SECRET=FILL
+      - SPOTIFY_REDIRECT_URI=FILL
+      - GENIUS_ACCESS_TOKEN=FILL

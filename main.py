@@ -1,13 +1,18 @@
 import argparse
 import os
-import time
-
 import tqdm
 
+from functools import partial
+from multiprocessing import Pool, cpu_count
 from typing import Tuple, List, Dict
 from spotipy import Spotify
 from spotipy.oauth2 import SpotifyOAuth
 from lyricsgenius import Genius
+from dotenv import load_dotenv
+
+from lyrics_utils import parse_lyrics
+
+load_dotenv()
 
 
 scope = "user-library-read"
@@ -48,7 +53,7 @@ def get_saved_tracks_from_spotify() -> List:
         except Exception as ex:
             print('Got exception while polling for tracks')
             print(ex)
-    
+
     return saved_tracks
 
 
@@ -93,6 +98,33 @@ def get_genius_track_ids_from_spotify_track(spotify_track: Dict, genius_client: 
     return possible_track_ids
 
 
+def check_if_its_the_missing_song(track: Dict, genius_client: Genius, known_lyrics_words: List[str],
+                                  likeliness_threshold: float):
+    try:
+        genius_track_ids = get_genius_track_ids_from_spotify_track(track, genius_client)
+        known_words_in_lyrics = 0
+        for genius_track_id in genius_track_ids:
+            song_lyrics = parse_lyrics(genius_client.lyrics(song_id=genius_track_id))
+            for known_word in known_lyrics_words:
+                known_words_in_lyrics += song_lyrics.get(known_word, 0)
+
+        if known_words_in_lyrics >= int(len(known_lyrics_words) * likeliness_threshold):
+            print(f'Found a song that might be gutten! - {track.get("name", "")} by'
+                  f' {track.get("artists", [])[0].get("name")}')
+
+    except Exception as ex:
+        return (track, ex)
+
+
+def run_tasks(parallel_tasks: List):
+    results = []
+    with Pool(cpu_count() - 1) as pool:
+        for task in parallel_tasks:
+            results.append(pool.apply_async(task))
+        for result in results:
+            result.wait()
+
+
 def command(known_lyrics: str, likeliness_threshold: float):
     saved_tracks = get_saved_tracks_from_spotify()
 
@@ -103,33 +135,19 @@ def command(known_lyrics: str, likeliness_threshold: float):
     print('Starting to look for good songs, this might take a '
           'while - get something nice to drink, smile and recoms would pop up :D')
 
-    # TODO: Add metrics to see where it's slow and optimize - also do in in threads!
+    tracks_to_test = []
     for track in saved_tracks:
-        try:
-            genius_track_ids = get_genius_track_ids_from_spotify_track(track, genius_client)
-            known_words_in_lyrics = 0
-            # TODO: Change how we scan for the right song, this way is shit but eh
-            for genius_track_id in genius_track_ids:
-                # TODO: add caching
-                song_lyrics = genius_client.lyrics(song_id=genius_track_id).lower()
-                for known_word in known_lyrics_words:
-                    if known_word in song_lyrics:
-                        known_words_in_lyrics += 1
+        tracks_to_test.append(partial(
+            check_if_its_the_missing_song, track, genius_client, known_lyrics_words, likeliness_threshold)
+        )
 
-            if known_words_in_lyrics >= int(len(known_lyrics_words) * likeliness_threshold):
-                print(f'Found a song that might be gutten! - {track.get("name", "")} by'
-                      f' {track.get("artists", [])[0].get("name")}')
-
-        except Exception as ex:
-            print(f'Some error was encountered in looking for a song, waiting 20s')
-            print(ex)
-            time.sleep(20)
+    run_tasks(tracks_to_test)
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(
         description='This script is meant to find a song that is just stuck in your head '
-                    'with some certanity, enter some words that you can remember from the song'
+                    'with some certainty, enter some words that you can remember from the song'
                     'and how much tolerant would you like the algo to find it, read more about it in the README.md')
 
     parser.add_argument('-kl', '--known_lyrics',
