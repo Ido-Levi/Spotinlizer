@@ -3,7 +3,7 @@ services:
   spotinlizer:
     image: spotinlizer:latest
     build: .
-    entrypoint: python /main.py --known_lyrics "my telescope i see looking back at me"
+    entrypoint: python /main.py --known_lyrics "THE TEXT I WANT TO LOOK FOR MATE" --likeliness_threshold 1.5
     volumes:
       - ./main.py:/main.py
       - ./lyrics_utils.py:/lyrics_utils.py

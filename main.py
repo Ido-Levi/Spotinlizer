@@ -1,5 +1,5 @@
-import argparse
 import os
+import argparse
 import tqdm
 
 from functools import partial
@@ -98,6 +98,8 @@ def get_genius_track_ids_from_spotify_track(spotify_track: Dict, genius_client: 
     return possible_track_ids
 
 
+# TODO: Change how we check if it's the right lyrics, maybe some ML project could be fun, like it works now, right? but
+# it still gives a lot of junk (depends on likeliness_threshold)
 def check_if_its_the_missing_song(track: Dict, genius_client: Genius, known_lyrics_words: List[str],
                                   likeliness_threshold: float):
     try:
@@ -108,9 +110,10 @@ def check_if_its_the_missing_song(track: Dict, genius_client: Genius, known_lyri
             for known_word in known_lyrics_words:
                 known_words_in_lyrics += song_lyrics.get(known_word, 0)
 
-        if known_words_in_lyrics >= int(len(known_lyrics_words) * likeliness_threshold):
+        if known_words_in_lyrics / len(known_lyrics_words) >= likeliness_threshold:
             print(f'Found a song that might be gutten! - {track.get("name", "")} by'
-                  f' {track.get("artists", [])[0].get("name")}')
+                  f' {track.get("artists", [])[0].get("name")} with the strength of'
+                  f' {known_words_in_lyrics / len(known_lyrics_words)}')
 
     except Exception as ex:
         return (track, ex)
@@ -130,7 +133,7 @@ def command(known_lyrics: str, likeliness_threshold: float):
 
     genius_client = Genius(get_genius_creds())
 
-    known_lyrics_words = known_lyrics.split(' ')
+    known_lyrics_words = known_lyrics.lower().split(' ')
 
     print('Starting to look for good songs, this might take a '
           'while - get something nice to drink, smile and recoms would pop up :D')
